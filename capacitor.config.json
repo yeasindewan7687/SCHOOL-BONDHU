@@ -1,0 +1,12 @@
+{
+  "appId": "com.childcarehighschool.onlineportal",
+  "appName": "Child Care High School",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https",
+    "allowNavigation": ["*"]
+  },
+  "android": {
+    "allowMixedContent": true
+  }
+}

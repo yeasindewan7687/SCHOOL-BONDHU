@@ -1,0 +1,85 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 1. Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Helpers ---
+    function isSignedIn() { return request.auth != null; }
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+    function isValidId(id) { return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); }
+    
+    // Admin check: verified email or explicit admin doc
+    function isAdmin() { 
+      return isSignedIn() && (
+        (request.auth.token.email == 'yeasindewan77@gmail.com' && request.auth.token.email_verified == true) ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      ); 
+    }
+
+    // --- Collection: chatbot_settings ---
+    function isValidChatbotConfig(data) {
+      return data.keys().hasAll(['prompt'])
+             && data.prompt is string
+             && data.prompt.size() <= 20000;
+    }
+
+    match /chatbot_settings/{id} {
+      allow get: if true;
+      allow create, update: if isAdmin() && isValidChatbotConfig(incoming());
+      allow delete: if isAdmin();
+    }
+
+    // --- Collection: chat_sessions ---
+    match /chat_sessions/{sessionId} {
+      allow get: if true;
+      allow list: if isAdmin();
+      allow create: if true; // Visitors can start chats
+      allow update: if true; // Visitors can add messages
+    }
+
+    // --- Collection: analytics ---
+    function isValidSiteStats(data) {
+      return (data.get('totalVisits', 0) is number)
+             && (data.get('uniqueVisitors', 0) is number);
+    }
+
+    function isValidDailyStats(data) {
+      return (data.get('visits', 0) is number)
+             && (data.get('date', '') is string);
+    }
+
+    match /analytics/{docId} {
+      allow read, write: if true;
+    }
+
+    // --- Collection: admins ---
+    match /admins/{adminId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // --- Collection: student_progress ---
+    function isValidStudentProgress(data) {
+      return data.keys().hasAll(['studentId', 'studentName'])
+             && data.studentId is string
+             && data.studentId.size() <= 64
+             && data.studentName is string
+             && data.studentName.size() <= 256;
+    }
+
+    match /student_progress/{studentId} {
+      allow get: if true;
+      allow list: if true;
+      allow create, update: if isValidId(studentId) && isValidStudentProgress(incoming());
+    }
+
+    // --- Collection: test ---
+    match /test/connection {
+      allow read: if true;
+    }
+  }
+}

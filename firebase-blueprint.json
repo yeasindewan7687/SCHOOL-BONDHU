@@ -1,0 +1,93 @@
+{
+  "entities": {
+    "ChatbotConfig": {
+      "title": "Chatbot Config",
+      "description": "Global settings for the AI chatbot",
+      "type": "object",
+      "properties": {
+        "prompt": {
+          "type": "string",
+          "description": "The system prompt/instructions for the AI"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["prompt"]
+    },
+    "ChatSession": {
+      "title": "Chat Session",
+      "description": "A user chat interaction session",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "userEmail": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "messages": {
+          "type": "array",
+          "items": { "type": "object" }
+        }
+      }
+    },
+    "Analytics": {
+      "title": "Analytics Data",
+      "description": "Website traffic statistics",
+      "type": "object",
+      "properties": {
+        "totalVisits": { "type": "number" },
+        "uniqueVisitors": { "type": "number" },
+        "visits": { "type": "number" },
+        "date": { "type": "string" },
+        "lastUpdated": { "type": "string", "format": "date-time" }
+      }
+    },
+    "StudentProgress": {
+      "title": "Student Progress",
+      "description": "Game scores and badging stats for a student",
+      "type": "object",
+      "properties": {
+        "studentId": { "type": "string" },
+        "studentName": { "type": "string" },
+        "studentClass": { "type": "string" },
+        "roll": { "type": "string" },
+        "section": { "type": "string" },
+        "mathHighScoreEasy": { "type": "number" },
+        "mathHighScoreMedium": { "type": "number" },
+        "mathHighScoreHard": { "type": "number" },
+        "triviaHighScore": { "type": "number" },
+        "memoryHighScore": { "type": "number" },
+        "unlockedBadges": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "dailyTasks": { "type": "object" },
+        "totalScore": { "type": "number" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["studentId", "studentName"]
+    }
+  },
+  "firestore": {
+    "chatbot_settings/config": {
+      "schema": "ChatbotConfig",
+      "description": "Singleton configuration for the chatbot"
+    },
+    "chat_sessions": {
+      "schema": "ChatSession",
+      "description": "Collection of visitor chat sessions"
+    },
+    "analytics": {
+      "schema": "Analytics",
+      "description": "Collection for site statistics"
+    },
+    "student_progress": {
+      "schema": "StudentProgress",
+      "description": "Progressive scores of students identified by Student ID"
+    },
+    "admins": {
+      "schema": "object",
+      "description": "List of admin UIDs allowed to modify sensitive settings"
+    }
+  }
+}

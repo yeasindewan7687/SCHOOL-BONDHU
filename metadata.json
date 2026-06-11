@@ -1,0 +1,6 @@
+{
+  "name": "Child Care High School",
+  "description": "The official digital portal for Child Care High School, Gazipur. Established for excellence, providing student information, results, notices, and academic updates.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

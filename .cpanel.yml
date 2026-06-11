@@ -1,0 +1,7 @@
+---
+deployment:
+  tasks:
+    - /bin/rsync -a --exclude='.git' --exclude='node_modules' --exclude='.env' ./ /home/childcar/childcare-app/
+    - mkdir -p /home/childcar/childcare-app/tmp
+    - touch /home/childcar/childcare-app/tmp/restart.txt
+

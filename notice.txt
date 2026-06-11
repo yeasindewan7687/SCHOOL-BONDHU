@@ -1,0 +1,251 @@
+861:export function NoticesAdmin() {
+862-  const [notices, setNotices] = useState<any[]>([]);
+863-  const [currentPage, setCurrentPage] = useState(1);
+864-  const [title, setTitle] = useState("");
+865-  const [details, setDetails] = useState("");
+866-  const [link, setLink] = useState("");
+867-  const [noticeDate, setNoticeDate] = useState(format(new Date(), "yyyy-MM-dd"));
+868-  const [file, setFile] = useState<File | null>(null);
+869-  const [uploading, setUploading] = useState(false);
+870-  const [uiMessage, setUiMessage] = useState<{text: string, type: 'error' | 'success'} | null>(null);
+871-  const [deleteModal, setDeleteModal] = useState<{isOpen: boolean, id: number | null}>({isOpen: false, id: null});
+872-  const [deleting, setDeleting] = useState(false);
+873-  const [editingId, setEditingId] = useState<number | null>(null);
+874-
+875-  useEffect(() => {
+876-    fetchNotices();
+877-  }, []);
+878-
+879-  const fetchNotices = async () => {
+880-    try {
+881-      const { data, error } = await supabase.from('notices').select('*').order('id', {ascending: false});
+882-      if (error) {
+883-        console.error("Supabase fetch error:", error);
+884-        setUiMessage({ text: "Error loading notices: " + error.message, type: "error" });
+885-      } else {
+886-        setNotices(data || []);
+887-      }
+888-    } catch (err: any) {
+889-      setUiMessage({ text: "Network error: " + err.message, type: "error" });
+890-    }
+891-  }
+892-
+893-  const handleAdd = async (e: React.FormEvent) => {
+894-    e.preventDefault();
+895-    if (!title) {
+896-        setUiMessage({ text: "Notice title is required", type: "error" });
+897-        return;
+898-    }
+899-    setUiMessage({ text: editingId ? "Updating notice..." : "Publishing to Board...", type: "success" }); // Loading state
+900-    setUploading(true);
+901-    
+902-    let finalLink = link;
+903-
+904-    if (file) {
+905-      const fileExt = file.name.split('.').pop();
+906-      const fileName = `${Math.random().toString(36).substring(2, 15)}_${Date.now()}.${fileExt}`;
+907-      const filePath = `notices/${fileName}`;
+908-
+909-      const { data: uploadData, error: uploadError } = await supabase.storage
+910-        .from('school_files')
+911-        .upload(filePath, file);
+912-
+913-      if (uploadError) {
+914-        setUiMessage({ text: "Storage Bucket missing: Please go to 'Database Setup' tab and run the SQL code, or manually create a public bucket named 'school_files' in Supabase Storage.", type: "error" });
+915-        setUploading(false);
+916-        return;
+917-      }
+918-      
+919-      const { data } = supabase.storage.from('school_files').getPublicUrl(filePath);
+920-      finalLink = data.publicUrl;
+921-    }
+922-
+923-    try {
+924-      let error;
+925-      const formattedDate = format(new Date(noticeDate), "dd/MM/yy");
+926-      if (editingId) {
+927-        const { error: updateError } = await supabase.from('notices').update({
+928-          title, details, link: finalLink, date: formattedDate
+929-        }).eq('id', editingId);
+930-        error = updateError;
+931-      } else {
+932-        const { error: insertError } = await supabase.from('notices').insert([{
+933-          title, details, link: finalLink, date: formattedDate
+934-        }]);
+935-        error = insertError;
+936-      }
+937-      
+938-      if (!error) {
+939-        setUiMessage({ text: editingId ? "Notice Updated!" : "Notice Added!", type: "success" });
+940-        await fetchNotices();
+941-        setCurrentPage(1); // Reset to page 1 so user can see it
+942-        setTitle(""); setDetails(""); setLink(""); setFile(null); setEditingId(null); setNoticeDate(format(new Date(), "yyyy-MM-dd"));
+943-        // Reset file input element if needed
+944-        const fileInput = document.getElementById('notice-file-upload') as HTMLInputElement;
+945-        if(fileInput) fileInput.value = "";
+946-        
+947-        setTimeout(() => {
+948-            const channel = supabase.channel('home_notices_channel');
+949-            
+950-            channel.subscribe((status) => {
+951-               if (status === 'SUBSCRIBED') {
+952-                 channel.send({ type: 'broadcast', event: 'notices_updated' })
+953-                   .then(() => supabase.removeChannel(channel));
+954-               }
+955-            });
+956-            setUiMessage(null);
+957-        }, 3000);
+958-      } else {
+959-        setUiMessage({ text: error.message, type: "error" });
+960-      }
+961-    } catch (err: any) {
+962-      console.error("handleAdd: Caught exception:", err);
+963-      setUiMessage({ text: "Network error: " + err.message, type: "error" });
+964-    }
+965-    setUploading(false);
+966-  };
+967-  
+968-  const handleEdit = (notice: any) => {
+969-      setEditingId(notice.id);
+970-      setTitle(notice.title);
+971-      setDetails(notice.details || "");
+972-      setLink(notice.link || "");
+973-      
+974-      let parsedDate = format(new Date(), "yyyy-MM-dd");
+975-      if (notice.date) {
+976-        const parts = notice.date.split('/');
+977-        if (parts.length === 3) {
+978-           const year = parts[2].length === 2 ? `20${parts[2]}` : parts[2];
+979-           parsedDate = `${year}-${parts[1]}-${parts[0]}`;
+980-        }
+981-      }
+982-      setNoticeDate(parsedDate);
+983-      
+984-      setFile(null);
+985-      // reset file input
+986-      const fileInput = document.getElementById('notice-file-upload') as HTMLInputElement;
+987-      if(fileInput) fileInput.value = "";
+988-      
+989-      const formContainer = document.getElementById('notice-admin-form');
+990-      if (formContainer) {
+991-          formContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+992-      } else {
+993-          window.scrollTo({top: 0, behavior: 'smooth'});
+994-      }
+995-  };
+996-
+997-  const confirmDelete = async () => {
+998-    if (!deleteModal.id) return;
+999-    setDeleting(true);
+1000-    const { error } = await supabase.from('notices').delete().eq('id', deleteModal.id);
+1001-    
+1002-    if (error) {
+1003-      setUiMessage({ text: error.message, type: "error" });
+1004-    } else {
+1005-      setUiMessage({ text: "Notice deleted successfully!", type: "success" });
+1006-      fetchNotices();
+1007-      const channel = supabase.channel('home_notices_channel');
+1008-      
+1009-      channel.subscribe((status) => {
+1010-         if (status === 'SUBSCRIBED') {
+1011-           channel.send({ type: 'broadcast', event: 'notices_updated' })
+1012-             .then(() => supabase.removeChannel(channel));
+1013-         }
+1014-      });
+1015-    }
+1016-    setDeleting(false);
+1017-    setDeleteModal({isOpen: false, id: null});
+1018-  }
+1019-
+1020-  const totalPages = Math.ceil(notices.length / ITEMS_PER_PAGE);
+1021-  const paginatedNotices = notices.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
+1022-
+1023-  return (
+1024-    <div className="p-8 md:p-10 grid lg:grid-cols-2 gap-12 bg-white">
+1025-      <ConfirmModal 
+1026-        isOpen={deleteModal.isOpen} 
+1027-        onClose={() => setDeleteModal({isOpen: false, id: null})} 
+1028-        onConfirm={confirmDelete}
+1029-        title="Delete Notice"
+1030-        message="Are you sure you want to delete this notice? This action cannot be undone."
+1031-        loading={deleting}
+1032-      />
+1033-      
+1034-      {/* Form Sidebar */}
+1035-      <div id="notice-admin-form" className="bg-slate-50/50 p-6 md:p-8 rounded-3xl border border-slate-100 relative overflow-hidden">
+1036-         <div className={`absolute top-0 left-0 w-1 h-full ${editingId ? 'bg-orange-500' : 'bg-indigo-500'}`}></div>
+1037-         <div className="flex justify-between items-center mb-8 relative z-10">
+1038-             <h3 className="text-xl font-extrabold text-slate-800 flex items-center gap-3"><div className={`${editingId ? 'bg-orange-100 text-orange-700' : 'bg-indigo-100 text-indigo-700'} p-2 rounded-xl shadow-sm`}>{editingId ? <Edit size={18} /> : <Plus size={18} />}</div> {editingId ? "Edit Notice" : "Post New Notice"}</h3>
+1039-             {editingId && (
+1040-                 <button type="button" onClick={() => {setEditingId(null); setTitle(""); setDetails(""); setLink("");}} className="text-sm font-bold text-slate-500 hover:text-orange-600 transition-colors">Cancel Edit</button>
+1041-             )}
+1042-         </div>
+1043-         {uiMessage && <div className={`p-4 rounded-xl mb-6 text-sm font-bold border ${uiMessage.type === 'success' ? 'bg-green-50 text-green-700 border-green-200' : 'bg-red-50 text-red-700 border-red-200'}`}>{uiMessage.text}</div>}
+1044-         
+1045-         <form onSubmit={handleAdd} className="space-y-5">
+1046-            <div className="grid md:grid-cols-2 gap-5">
+1047-              <div>
+1048-                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Notice Title <span className="text-red-500">*</span></label>
+1049-                <input type="text" placeholder="e.g., Half Yearly Examination" value={title} onChange={e => setTitle(e.target.value)} className="w-full border-2 border-slate-200 bg-white p-3.5 rounded-xl text-sm focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all font-medium text-slate-700" />
+1050-              </div>
+1051-              <div>
+1052-                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Date <span className="text-red-500">*</span></label>
+1053-                <input type="date" value={noticeDate} onChange={e => setNoticeDate(e.target.value)} className="w-full border-2 border-slate-200 bg-white p-3.5 rounded-xl text-sm focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all font-medium text-slate-700" />
+1054-              </div>
+1055-            </div>
+1056-            
+1057-            <div>
+1058-              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Notice Details</label>
+1059-              <textarea placeholder="Write the main content of your notice here..." value={details} onChange={e => setDetails(e.target.value)} className="w-full border-2 border-slate-200 bg-white p-3.5 rounded-xl text-sm h-36 focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all resize-none font-medium text-slate-700" />
+1060-            </div>
+1061-            
+1062-            <div>
+1063-              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">External Link (Optional)</label>
+1064-              <input type="url" placeholder="https://drive.google.com/..." value={link} onChange={e => setLink(e.target.value)} className="w-full border-2 border-slate-200 bg-white p-3.5 rounded-xl text-sm focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all font-medium text-slate-700" />
+1065-            </div>
+1066-
+1067-            <div>
+1068-              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Or Upload File (PDF/Image)</label>
+1069-              <div className="flex items-center gap-3">
+1070-                <input id="notice-file-upload" type="file" accept="image/*,.pdf" onChange={e => {
+1071-                  if (e.target.files && e.target.files.length > 0) {
+1072-                    setFile(e.target.files[0]);
+1073-                  } else {
+1074-                    setFile(null);
+1075-                  }
+1076-                }} className="flex-1 w-full border-2 border-slate-200 bg-white p-2 rounded-xl text-sm focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all file:mr-4 file:py-2.5 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-bold file:uppercase file:tracking-wider file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 cursor-pointer" />
+1077-                {file && (
+1078-                  <button type="button" onClick={() => {
+1079-                    setFile(null);
+1080-                    const fileInput = document.getElementById('notice-file-upload') as HTMLInputElement;
+1081-                    if(fileInput) fileInput.value = "";
+1082-                  }} className="shrink-0 bg-white text-red-600 hover:bg-red-50 hover:border-red-300 px-4 py-3 rounded-xl text-sm font-bold transition-colors border-2 border-slate-200 shadow-sm">
+1083-                    Clear
+1084-                  </button>
+1085-                )}
+1086-              </div>
+1087-            </div>
+1088-
+1089-            <div className="pt-2 flex gap-3">
+1090-              {editingId && (
+1091-                <button type="button" onClick={() => {setEditingId(null); setTitle(""); setDetails(""); setLink("");}} className="w-1/3 bg-slate-100 text-slate-600 font-bold py-4 rounded-xl text-sm hover:bg-slate-200 transition-all shadow-sm flex items-center justify-center">
+1092-                  Cancel Edit
+1093-                </button>
+1094-              )}
+1095-              <button type="submit" disabled={uploading} className={`flex-1 ${editingId ? 'bg-orange-600 hover:bg-orange-700' : 'bg-indigo-600 hover:bg-indigo-700'} text-white font-bold py-4 rounded-xl text-sm transition-all shadow-md disabled:bg-indigo-400 disabled:cursor-not-allowed flex items-center justify-center gap-2`}>
+1096-                {uploading && <Loader2 size={18} className="animate-spin" />}
+1097-                {uploading ? "Processing..." : (editingId ? "Update Notice" : "Publish to Notice Board")}
+1098-              </button>
+1099-            </div>
+1100-         </form>
+1101-      </div>
+1102-
+1103-      {/* List Preview */}
+1104-      <div className="flex flex-col h-full overflow-hidden">
+1105-         <div className="flex justify-between items-center mb-8 shrink-0">
+1106-           <h3 className="text-xl font-extrabold text-slate-800">Notice Board Preview</h3>
+1107-           <span className="bg-slate-100 text-slate-600 text-xs font-bold px-3 py-1 rounded-full">{notices.length} active notices</span>
+1108-         </div>
+1109-         
+1110-         <div className="overflow-x-auto bg-white rounded-3xl border-2 border-slate-100 shadow-sm flex-grow">
+1111-            <table className="w-full text-left border-collapse">
